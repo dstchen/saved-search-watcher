@@ -3,7 +3,7 @@
 
 Using a search template, the `toJson` Mustache template tag, the search `meta`
 attribute, and a Saved Search, a Watcher can be implemented which will use the
-Apache Lucene style query from the Saved Search.
+Apache Lucene style query from a Saved Search.
 
 This repository provides a concreate example of this method.
 
@@ -24,7 +24,7 @@ The example Watcher exists in the `saved-search-watcher.json` file.
 Navigate to the Dev Tools in the Kibana UI, and use the following request to
 add the Watcher - pasting the contents of the above file in place of `{...}`:
 
-    PUT _pack/watch/watcher/system-log-errors
+    PUT _xpack/watch/watcher/system-log-errors
     {...}
 
 The Watcher will then be live.
