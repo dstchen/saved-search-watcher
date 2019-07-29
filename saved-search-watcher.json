@@ -1,0 +1,127 @@
+{
+  "trigger": {
+    "schedule": {
+      "interval": "10m"
+    }
+  },
+  "input": {
+    "chain": {
+      "inputs": [
+        {
+          "findSavedSearch": {
+            "search": {
+              "request": {
+                "indices": [
+                  ".kibana"
+                ],
+                "body": {
+                  "query": {
+                    "term": {
+                      "_id": "{{ctx.metadata.savedSearchId}}"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "parseSavedSearch": {
+            "search": {
+              "request": {
+                "indices": [
+                  ".kibana"
+                ],
+                "template": {
+                  "source": """{"query":{"term":{"_id":"{{ctx.payload.findSavedSearch.hits.hits.0._id}}"}},"aggs":{"id":{"terms":{"field": "_id"},"meta":{"searchSourceJSON": {{#toJson}}ctx.payload.findSavedSearch.hits.hits.0._source.search.kibanaSavedObjectMeta.searchSourceJSON{{/toJson}} }}}}""",
+                  "lang": "mustache"
+                }
+              }
+            }
+          }
+        },
+        {
+          "savedSearchQuery": {
+            "search": {
+              "request": {
+                "indices": [
+                  "cc-syslog-*"
+                ],
+                "body": {
+                  "size": 10000,
+                  "query": {
+                    "bool": {
+                      "must": {
+                        "query_string": {
+                          "query": "(NOT watcherState.keyword:processed) AND ({{ctx.payload.parseSavedSearch.aggregations.id.meta.searchSourceJSON.query.query}})"
+                        }
+                      },
+                      "filter": {
+                        "range": {
+                          "@timestamp": {
+                            "gte": "now-1h"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "condition": {
+    "script": {
+      "source": "return ctx.payload.savedSearchQuery.hits.hits.size() > 0",
+      "lang": "painless"
+    }
+  },
+  "actions": {
+    "save_results": {
+      "transform": {
+        "script": {
+          "source": """
+def docs = [];
+
+for(hit in ctx.payload.savedSearchQuery.hits.hits) {
+    def update = hit['_source'];
+
+    update['_id'] = hit['_id'];
+    update['_index'] = hit['_index'];
+    update['watcherState'] = 'processed';
+
+    docs.add(update)
+}
+
+return ['_doc': docs]
+""",
+          "lang": "painless"
+        }
+      },
+      "index": {
+        "doc_type": "doc"
+      }
+    },
+    "send_email": {
+      "email": {
+        "profile": "standard",
+        "to": [
+          "stephen.vickers@nospaceships.com"
+        ],
+        "subject": "[saved-search-watcher] {{ctx.metadata.name}}",
+        "body": {
+          "text": """
+{{ctx.payload.savedSearchQuery.hits.hits.size}} events have been discovered.
+"""
+        }
+      }
+    }
+  },
+  "metadata": {
+    "savedSearchId": "search:0dff3240-af9f-11e9-b459-b1376c731de5",
+    "name": "system-log-errors"
+  }
+}
